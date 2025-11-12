@@ -1,0 +1,251 @@
+---
+title: "TUGAS TPG"
+author: "Zanira Husna G1401231097"
+date: "2025-11-05"
+output:   
+  html_document:
+    toc: true
+    toc_float: true
+    highlight: tango
+---
+
+
+```{r, warning=FALSE, message=FALSE}
+library(factoextra)
+library(cluster)
+library(clusterCrit)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(scales)
+library(RColorBrewer)
+```
+
+# Data
+
+Data yang digunakan merupakan data bawaan R, yaitu data 'state.x77'. Data berisi berbagai indikator ekonomi, sosial, dan kesehatan dari 50 negara bagian Amerika Serikat.
+```{r}
+# Muat dataset
+data(state.x77)
+
+# Ubah ke data frame
+data_state <- as.data.frame(state.x77)
+
+# Lihat struktur data
+str(data_state)
+```
+
+```{r}
+head(data_state)
+```
+
+## Standarisasi skala pada data
+```{r}
+# Standarisasi data
+data_scaled <- scale(data_state)
+
+# Cek hasil standarisasi
+head(data_scaled)
+```
+
+# Clustering
+
+Penentuan nilai k
+```{r}
+fviz_nbclust(data_scaled, kmeans, method = "wss") +
+labs(title = "Elbow Method")
+```
+
+```{r}
+fviz_nbclust(data_scaled, kmeans, method = "silhouette") +
+labs(title = "Silhouette Method")
+```
+
+```{r}
+par(mfrow = c(1, 2))
+# k = 2
+km2 <- kmeans(scale(state.x77), centers = 2, nstart = 25)
+fviz_cluster(km2, data = scale(state.x77), main = "K-Means (k=2)")
+
+# k = 3
+km3 <- kmeans(scale(state.x77), centers = 3, nstart = 25)
+fviz_cluster(km3, data = scale(state.x77), main = "K-Means (k=3)")
+
+```
+
+Diambil nilai k=3
+
+```{r}
+set.seed(97)
+km_state <- kmeans(data_scaled, centers = 3, nstart = 25)
+
+# Lihat hasil ringkas
+km_state
+```
+
+Nilai 48.2% berarti hasil clustering sudah lumayan baik. Sekitar 48% variasi total data dapat dijelaskan oleh perbedaan antar cluster. Menunjukkan ada pemisahan yang cukup jelas antar kelompok, meskipun masih ada sedikit overlap antar cluster.
+
+## Hasil Clustering
+
+```{r}
+table(km_state$cluster)
+```
+Banyak observasi pada tiap kluster, kluster 1 terdapat 15 observasi, kluster 2 11 observasi, dan kluster 3 24 observasi.
+
+```{r}
+head(data.frame(Observasi = 1:length(km_state$cluster),
+           Cluster = km_state$cluster),10)
+```
+
+Tabel data dengan penambahan kolom clusternya
+
+```{r}
+data_clustered <- cbind(data_state, Cluster = as.factor(km_state$cluster))
+head(data_clustered)
+```
+
+Rata-rata setiap variabel di masing-masing cluster
+
+```{r}
+aggregate(data_state, by = list(Cluster = km_state$cluster), mean)
+```
+
+# Komponen
+
+sejumlah komponen penting untuk memahami hasil pengelompokan
+
+```{r}
+names(km_state)
+```
+
+## Label cluster untuk setiap observasi
+```{r}
+km_state$cluster
+```
+
+## Koordinat pusat (centroid) tiap cluster
+```{r}
+km_state$cluster
+```
+
+## Total variasi data (Total Sum of Squares)
+```{r}
+km_state$totss
+```
+
+## Variasi dalam masing-masing cluster
+```{r}
+km_state$withinss
+```
+
+Menunjukkan bahwa ragam pada kluster 1 yang peling besar, disusul kluster 3 kemudian 2.
+
+## Jumlah keseluruhan variasi dalam cluster
+```{r}
+km_state$tot.withinss
+```
+
+## Variasi antar cluster
+```{r}
+km_state$betweenss
+```
+
+## Jumlah anggota setiap cluster
+```{r}
+km_state$size
+```
+
+## Jumlah iterasi hingga konvergen
+```{r}
+km_state$iter
+```
+
+## Status hasil (0 = sukses)
+```{r}
+km_state$ifault
+```
+
+# Evaluasi Clustering
+```{r}
+# Ambil hasil cluster
+cluster_km <- km_state$cluster
+
+# ---- Evaluasi Kualitas Clustering ----
+dist_matrix <- dist(data_scaled, method = "euclidean")
+
+sil <- mean(silhouette(cluster_km, dist_matrix)[, 3])
+ch <- intCriteria(traj = as.matrix(data_scaled),
+                  part = cluster_km,
+                  crit = "Calinski_Harabasz")$calinski_harabasz
+dunn <- intCriteria(traj = as.matrix(data_scaled),
+                    part = cluster_km,
+                    crit = "Dunn")$dunn
+
+# Tampilkan hasil evaluasi
+data.frame(Silhouette = sil,
+           Calinski_Harabasz = ch,
+           Dunn = dunn)
+```
+
+Nilai Silhouette menunjukkan seberapa baik setiap observasi berada dalam clusternya sendiri dibandingkan dengan cluster lain. Nilai 0.32 menunjukkan struktur cluster ada tapi tidak terlalu kuat. Masih mungkin ada tumpang tindih antar cluster atau perlu jumlah cluster lain untuk hasil yang lebih baik.
+
+Indeks Calinski_Harabasz membandingkan variasi antar cluster (antara-cluster variance) dengan variasi dalam cluster (within-cluster variance). Semakin besar nilainya, semakin baik pemisahan antar cluster dan semakin rapat cluster-nya.
+
+Indeks Dunn mengukur rasio antara jarak minimum antar cluster dan diameter maksimum dalam cluster. Nilai 0.13 relatif rendah, berarti ada overlap antar cluster atau beberapa cluster tidak terlalu rapat.
+
+```{r}
+# ---- Karakteristik Tiap Cluster ----
+data_clustered <- data.frame(state.x77, cluster = factor(cluster_km))
+
+cluster_summary <- data_clustered %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), mean, .names = "{.col}"))
+
+cluster_summary
+```
+
+```{r}
+fviz_cluster(km_state, data = data_scaled,
+palette = "jco", geom = "point",
+main = "Visualisasi Hasil K-Means Clustering (3 Cluster)")
+```
+
+```{r}
+# ---- Ubah ke format long ----
+heat_data <- cluster_summary %>%
+  pivot_longer(-cluster, names_to = "Variabel", values_to = "Rata2")
+
+# ---- Normalisasi nilai rata-rata antar variabel ----
+heat_data <- heat_data %>%
+  group_by(Variabel) %>%
+  mutate(Rata2_Skala = rescale(Rata2, to = c(0, 1))) %>%
+  ungroup()
+
+head(heat_data)
+```
+
+```{r}
+# ---- Heatmap dengan data terskala ----
+ggplot(heat_data, aes(x = Variabel, y = cluster, fill = Rata2_Skala)) +
+  geom_tile(color = "white") +
+  scale_fill_gradientn(colors = c("#56B1F7", "white", "#FF6B6B"),
+                       name = "Skala (0–1)") +
+  labs(title = "Heatmap Karakteristik Cluster (Data Distandarkan)",
+       x = "Variabel", y = "Cluster") +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+# ---- Bar Plot versi terskala ----
+ggplot(heat_data, aes(x = Variabel, y = Rata2_Skala, fill = cluster)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Rata-rata Tiap Variabel per Cluster (Data Distandarkan)",
+       x = "Variabel", y = "Rata-rata (Skala 0–1)") +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Secara garis besar dapat dilihat Cluster 1 berisi negara bagian besar dan padat penduduk, dengan angka pembunuhan tinggi dan harapan hidup rendah. Cluster 2 menggambarkan wilayah dengan tingkat pendidikan rendah dan kesejahteraan ekonomi rendah, serta umur harapan hidup lebih pendek. Cluster 3 mencerminkan wilayah makmur dan berpendidikan tinggi, dengan keamanan lebih baik dan kualitas hidup tinggi.
