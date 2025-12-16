@@ -1,0 +1,285 @@
+---
+title: "Analisis Korespondensi"
+author: "Zanira Husna"
+date: "2025-12-16"
+output:   
+  html_document:
+    toc: true
+    toc_float: true
+    highlight: tango
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(factoextra)
+library(ggplot2)
+library(FactoMineR)
+library(gplots)
+```
+
+
+# Data
+
+Data bangkitan dengan 2 peubah kategori, peubah pertama kategori1 dengan 5 taraf A,B,C,D,E dan peubah kedua kategori2 dengan 7 taraf 1,2,3,4,5,6,7. data memiliki panjang n=1000 amatan.
+
+```{r}
+set.seed(1097)  # NIM
+
+n <- 1000
+
+kategori1 <- factor(
+  sample(c("A", "B", "C", "D", "E"), n, replace = TRUE)
+)
+
+kategori2 <- factor(
+  sample(c("1", "2", "3","4","5","6","7"), n, replace = TRUE)
+)
+
+data <- data.frame(kategori1, kategori2)
+
+head(data)
+```
+
+# Manual
+
+## Tabel Kontingensi
+
+```{r}
+konti <- table(data$kategori1, data$kategori2)
+konti
+```
+
+Dari tabel kontingensi dapat dilihat frekuensi terbanyak pada C-6 sebanyak 41 amatan. Kombinasi D-4 memiliki frekuensi yang paling sedikit dengan 16 amatan. Frekuensi tidak jauh berbeda, cenderung berkisar pada nilai 20-30an.
+
+```{r}
+balloonplot(konti, main ="Tabel Kontingensi", xlab ="", ylab="", label = FALSE, show.margins = FALSE)
+```
+
+semakin besar lingkaran menunjukkan semakin besar pula nilai yang direpresentasikan
+
+## Tabel Korespondensi
+
+```{r}
+kores <- konti/n
+kores
+```
+
+## Vektor kolom dan baris
+
+```{r}
+kolom <- colSums(kores)
+kolom
+```
+
+```{r}
+baris<- rowSums(kores)
+baris
+```
+
+hasil dari vektor menunjukkan persentase munculnya tiap taraf kategori peubah. baris merepresentasikan kategori1 dan kolom untuk kategori2. pada kategori1 C memiliki nilai terbesar, artinya C yang paling banyak muncul (modus). begitu juga dengan kategori2 dengan nilai terbesar pada 7.
+
+## Matriks kolom dan baris
+
+```{r}
+matriks_kol <- diag(kolom)
+matriks_kol
+```
+
+```{r}
+matriks_bar <- diag(baris)
+matriks_bar
+```
+
+## Analisis profil baris
+
+```{r}
+R <- solve(matriks_bar)%*%kores
+rownames(R) <- rownames(kores)
+R
+```
+
+pada kolom "1" dan "2", nilai A memiliki nilai tertinggi (0,15) artinya banyak amatan "1" dan juga amatan "2" yang memiliki nilai A. kolom "3" dan "5" D memiliki nilai tertinggi (0.16 dan 0.19), banyak amatan "3" dan amatan "5" yang memiliki nilai D. begitupun dengan kolom 4 dengan E, kolom 6 dan 7 dengan C.
+
+```{r}
+mass_c <- colSums(R)
+mass_c
+```
+
+nilai massa setiap kolom, dengan nilai yang terbesar pada 7. hasil ini sama dengan sebelumnya yang menunjukkan 7 sebagai modus
+
+## Analisis profil kolom
+
+```{r}
+C <- kores%*%solve(matriks_kol)
+colnames(C) <- colnames(kores)
+C
+```
+
+pada baris A, B, dan E, nilai "4" memiliki nilai tertinggi (0.24 dan 0,23) artinya banyak amatan A, B dan juga amatan E yang memiliki nilai "4". pada baris C, "6" memiliki nilai tertinggi (0.27) yang berarti banyak amatan C yang memiliki nilai "6". begitupun dengan kolom D dengan "5". ini menunjukkan hasil yang cukup berbeda dengan analisis baris
+
+```{r}
+mass_r <- rowSums(C)
+mass_r
+```
+
+Nilai massa kategori1 menunjukkan nilai C merupakan yang terbesar. Hasil ini juga masih sama dengan hasil modus awal kategori1.
+
+## Menentukan koordinat profil baris dan kolom
+
+```{r}
+Prc <- kores - baris%*%t(kolom)
+Prc
+```
+
+```{r}
+Z <- diag(1/sqrt(diag(matriks_bar)))%*%Prc%*%diag(1/sqrt(diag(matriks_kol)))
+Z
+```
+
+```{r}
+Du <- diag(sqrt(eigen(Z %*% t(Z))$values))[1:2,1:2]
+Du
+```
+
+```{r}
+U <- eigen(Z %*% t(Z))$vectors
+U
+```
+
+```{r}
+A <- (sqrt(matriks_bar) %*% U)[,1:2]
+A
+```
+
+```{r}
+V <- eigen(t(Z) %*% Z)$vectors
+V
+```
+
+```{r}
+B <- (sqrt(matriks_kol) %*% V)[,1:2]
+B
+```
+
+### koordinas baris
+
+```{r}
+rows <- solve(matriks_bar)%*%A%*%Du
+rows
+```
+
+### koordinas kolom
+
+```{r}
+cols <- solve(matriks_kol)%*%B%*%Du
+cols
+```
+
+## visualisasi berdasarkan koordinat profil baris dan kolom
+
+```{r}
+row_df <- data.frame(rows)
+col_df <- data.frame(cols)
+colnames(row_df) <- c("Dim.1", "Dim.2")
+rownames(row_df) <- rownames(konti)
+colnames(col_df) <- c("Dim.1", "Dim.2")
+rownames(col_df) <- colnames(konti)
+row_df["Var"] <- "kategori1"
+row_df["Size"] <- 2
+col_df["Var"] <- "kategori2"
+col_df["Size"] <- 2
+ca.plot.df <- rbind(col_df, row_df)
+ca.plot.df["Label"] <- rownames(ca.plot.df)
+ca.plot.df
+```
+
+```{r}
+ggplot(ca.plot.df, aes(x = Dim.1, y = Dim.2,
+                       col = Var, shape = Var,
+                       label = Label, size = Size)) +
+  geom_vline(xintercept = 0, lty = "dashed", alpha = .5) +
+  geom_hline(yintercept = 0, lty = "dashed", alpha = .5) +
+  geom_point() + geom_text(check_overlap = T, hjust=-0.15)
+```
+
+# Pemodelan
+
+```{r}
+chisq <- chisq.test(konti)
+chisq
+```
+
+dari hasil uji Khi-kuadrat, diperoleh bahwa kedua peubah tidak terlalu saling terkait.
+
+```{r}
+model <- CA(konti, graph = F)
+print(model)
+```
+
+## akar ciri
+
+```{r}
+eig.val <- get_eigenvalue(model)
+eig.val
+```
+
+## persentase keragaman
+
+```{r}
+fviz_screeplot(model, addlabels = TRUE)
+```
+
+2 dimensi cukup menggambarkan keragaman pada data dengan 84%, sudah melebihi batas 70%
+
+## analisis dan visualisasi profil baris
+
+```{r}
+row <- get_ca_row(model)
+row
+```
+
+```{r}
+row$coord
+```
+
+```{r}
+row$contrib
+```
+
+Untuk memetakan menjadi dua dimensi, maka hanya perlu melihat Dim 1 dan Dim 2 nya saja. profil baris yang berkontribusi paling banyak kepada Dim 1 dan Dim 2 adalah baris yang paling penting dalam menjelaskan keragaman data. Dalam hal ini, C dan D dianggap sebagai kategori yang menyumbang keragaman paling besar.
+
+```{r}
+fviz_ca_row(model, col.row="RED", shape.row = 15)
+```
+
+profil A, B dan E dapat dikatakan mirip dikarenkan posisi ketiganya berdekatan, namun ketiganya berkorelasi negatif C dan D 
+
+## analisis dan visualisasi profil kolom
+
+```{r}
+col <- get_ca_col(model)
+col
+```
+
+```{r}
+col$coord
+```
+
+```{r}
+col$contrib
+```
+
+profil kolom yang berkontribusi paling banyak kepada Dim 1 dan Dim 2 adalah kolom yang paling penting dalam menjelaskan keragaman data. Dalam hal ini, "4" dan "5" dianggap sebagai kategori yang menyumbang keragaman paling besar.
+
+```{r}
+fviz_ca_col(model, col.col="BLUE", shape.col = 15)
+```
+
+berbeda dengan kategori1, pada kategori2 tidak ada titik yang berdekatan sehingga tidak ada yang memiliki profil serupa
+
+## pembentukan plot korespondensi
+
+```{r}
+fviz_ca_biplot(model, repel = TRUE)
+```
+
+plot keseluruhan korelasi antara kategori1 dan kategori2. terlihat A, B, dan E berdekatan dengan "1" artinya ketiga kategori banyak memiliki nilai "1". selai itu A juga beberapa memiliki nilai "4", dan E memiliki beberapa nilai "2". C dan "6" juga berdekatan sesuai dengan hasil sebelumnya, namun terdapat beberapa nlai "7" juga. D cenderung memiliki nilai "3" dan "5", hasil ini juga masih sama dengan hasil sebelumnya.
